@@ -27,7 +27,7 @@
  }
  class GitHubStorage{
   #token='';
-  constructor({owner='engcolombo',repo='SMC_Agentes',branch='main',fetcher=fetch}={}){
+  constructor({owner='engcolombo',repo='SMC_Agentes',branch='main',fetcher=(...args)=>root.fetch(...args)}={}){
    if(!/^[\w.-]+$/.test(owner)||!/^[\w.-]+$/.test(repo))throw Error('Repositório inválido.');
    this.owner=owner;this.repo=repo;this.branch=branch;this.fetcher=fetcher;this.base=`https://api.github.com/repos/${owner}/${repo}`;
    this.cloud=true;this.label='GitHub';this.delay=5000;this.key=`smc-github-draft-v1:${owner}/${repo}:${branch}`;this.path='visual/method.json';this.sha=null;this.revision=null;this.catalog={};
@@ -36,9 +36,10 @@
   disconnect(){this.#token='';this.sha=null;this.revision=null;this.catalog={}}
   async request(path,options={}){
    if(!this.#token)throw fail('Conecte sua conta do GitHub para continuar.',401);
-   let r;
-   try{r=await this.fetcher(this.base+path,{...options,signal:AbortSignal.timeout(30000),cache:'no-store',referrerPolicy:'no-referrer',headers:{Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28',Authorization:'Bearer '+this.#token,...(options.body?{'Content-Type':'application/json'}:{})}})}
-   catch{throw fail('Falha de conexão. O rascunho continua neste navegador; tente salvar novamente.',0)}
+   let r;const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),30000);
+   try{r=await this.fetcher(this.base+path,{...options,signal:controller.signal,cache:'no-store',referrerPolicy:'no-referrer',headers:{Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28',Authorization:'Bearer '+this.#token,...(options.body?{'Content-Type':'application/json'}:{})}})}
+   catch(e){throw fail(e.name==='AbortError'?'O GitHub demorou para responder. Tente conectar novamente.':'Não foi possível conectar ao GitHub. Verifique sua conexão e tente novamente. Se persistir, abra o site diretamente no Chrome ou Edge.',0)}
+   finally{clearTimeout(timeout)}
    if(!r.ok){
     const messages={401:'Credencial inválida ou expirada. Reconecte sua conta.',403:'GitHub recusou o acesso. Verifique Contents: Read and write, a validade da credencial e os limites da API.',404:'Arquivo ou repositório não acessível. Selecione SMC_Agentes na credencial do GitHub.',409:'Outro aparelho salvou alterações. Baixe sua cópia antes de recarregar o quadro.',422:'O GitHub não aceitou a gravação. Confira permissões e recarregue o quadro mantendo seu rascunho.'};
     throw fail(messages[r.status]||`GitHub indisponível (HTTP ${r.status}). Tente novamente.`,r.status);
